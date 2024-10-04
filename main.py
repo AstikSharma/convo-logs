@@ -144,7 +144,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     result = await session.execute(select(User).filter(User.email == form_data.username))
     user = result.scalars().first()
     if not user:
-        # Return 404 if the user doesn't exist
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
