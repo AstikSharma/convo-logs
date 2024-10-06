@@ -19,47 +19,41 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15))  # Default to 15 minutes if not provided
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15))
 
 app = FastAPI()
 
 # Add CORS middleware to allow requests from the frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Adjust this to your frontend's URL
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 async def get_session() -> AsyncSession:
     async with SessionLocal() as session:
         yield session
 
-
 class QueryCreate(BaseModel):
-    user_id: UUID  # Required
-    query_text: str  # Required
-    session_id: UUID  # Required
-    query_type: Optional[str] = None  # Optional
-    device_type: Optional[str] = None  # Optional
-    location: Optional[str] = None  # Optional
-    intent_detected: Optional[str] = None  # Optional
-
+    user_id: UUID
+    query_text: str
+    session_id: UUID
+    query_type: Optional[str] = None
+    device_type: Optional[str] = None
+    location: Optional[str] = None
+    intent_detected: Optional[str] = None
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-
 def get_password_hash(password):
     return pwd_context.hash(password)
-
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -71,12 +65,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-
 
 class UserResponse(BaseModel):
     id: UUID
@@ -86,27 +78,21 @@ class UserResponse(BaseModel):
     class Config:
         orm_mode = True
 
-
 class Token(BaseModel):
     access_token: str
     token_type: str
 
-
 class TokenData(BaseModel):
     username: Optional[str] = None
 
-
 @app.post("/users/", response_model=UserResponse)
 async def create_user(user: UserCreate, session: AsyncSession = Depends(get_session)):
-    # Hash the user's password
     hashed_password = get_password_hash(user.password)
-
     new_user = User(
         name=user.name,
         email=user.email,
         hashed_password=hashed_password
     )
-
     session.add(new_user)
     try:
         await session.commit()
@@ -114,9 +100,7 @@ async def create_user(user: UserCreate, session: AsyncSession = Depends(get_sess
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=400, detail="Email already registered")
-
     return new_user
-
 
 async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_session)):
     credentials_exception = HTTPException(
@@ -137,7 +121,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
     if user is None:
         raise credentials_exception
     return user
-
 
 @app.post("/login", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_session)):
@@ -161,18 +144,15 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-
 @app.get("/queries/{user_id}")
 async def get_user_queries(user_id: UUID, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     result = await session.execute(select(Query).filter(Query.user_id == user_id))
     queries = result.scalars().all()
     return queries
 
-
 @app.get("/users/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
-
 
 @app.post("/queries/")
 async def create_query(
@@ -183,15 +163,11 @@ async def create_query(
     query_data = query.dict()
     query_data['timestamp'] = datetime.utcnow()
     query_data['user_id'] = current_user.id
-
     db_query = Query(**query_data)
-
     session.add(db_query)
     await session.commit()
     await session.refresh(db_query)
-
     return db_query
-
 
 @app.get("/conversations/{session_id}")
 async def get_conversation_by_session(session_id: UUID, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
@@ -199,27 +175,21 @@ async def get_conversation_by_session(session_id: UUID, session: AsyncSession = 
     conversation = result.scalars().all()
     return conversation
 
-
 @app.delete("/conversations/{session_id}")
 async def delete_conversation(session_id: UUID, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     result = await session.execute(select(Query).filter(Query.session_id == session_id))
     conversation = result.scalars().all()
-
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
-
     for query in conversation:
         await session.delete(query)
-
     await session.commit()
     return {"message": "Conversation deleted successfully"}
-
 
 @app.on_event("startup")
 async def startup():
     await database.connect()
     await init_db()
-
 
 @app.on_event("shutdown")
 async def shutdown():
