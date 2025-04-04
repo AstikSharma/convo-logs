@@ -42,7 +42,7 @@ class QueryCreate(BaseModel):
     user_id: UUID
     query_text: str
     session_id: UUID
-    query_type: Optional[str] = None
+    query_type: Optional[str] = None 
     device_type: Optional[str] = None
     location: Optional[str] = None
     intent_detected: Optional[str] = None
@@ -144,15 +144,15 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.get("/users/me", response_model=UserResponse)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
 @app.get("/queries/{user_id}")
 async def get_user_queries(user_id: UUID, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     result = await session.execute(select(Query).filter(Query.user_id == user_id))
     queries = result.scalars().all()
     return queries
-
-@app.get("/users/me", response_model=UserResponse)
-async def read_users_me(current_user: User = Depends(get_current_user)):
-    return current_user
 
 @app.post("/queries/")
 async def create_query(
